@@ -18,7 +18,20 @@ class BridgeDownloadRequest {
   final int? maxBytes;
 }
 
+class BridgeDownloadSummary {
+  BridgeDownloadSummary({
+    required this.id,
+    required this.url,
+    required this.status,
+  });
+
+  final String id;
+  final String url;
+  final String status;
+}
+
 abstract class RustBridgeApi {
   Future<String> createDownload(BridgeDownloadRequest request);
   Future<void> cancelDownload(String downloadId);
+  Future<List<BridgeDownloadSummary>> listDownloads();
 }

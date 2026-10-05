@@ -9,7 +9,14 @@ Bu repo, Flutter-Rust bridge için `flutter_rust_bridge` yaklaşımını hedefle
 
 ## Başlangıç sözleşmesi
 - Dart: `apps/flutter_app/lib/core/services/rust_bridge_contract.dart`
+- Dart adapter: `apps/flutter_app/lib/core/services/bridge_download_service.dart`
 - Rust: `rust/core/src/api/mod.rs`
+- Rust service: `rust/core/src/api/service.rs`
+
+Mevcut sözleşme operasyonları:
+- `createDownload`
+- `cancelDownload`
+- `listDownloads`
 
 ## Bağımlılık sürüm yaklaşımı
 - Rust crate bağımlılıkları `rust/core/Cargo.toml` içinde açık sürümlerle pinlenmiştir.

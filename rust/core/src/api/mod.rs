@@ -1,3 +1,5 @@
+pub mod service;
+
 use chrono::Utc;
 
 use crate::models::{DownloadId, DownloadRequest};

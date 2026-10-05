@@ -1,14 +1,16 @@
 import 'dart:async';
 
 class DownloadItem {
-  DownloadItem({required this.url, required this.status});
+  DownloadItem({required this.id, required this.url, required this.status});
 
+  final String id;
   final String url;
   final String status;
 }
 
 abstract class DownloadService {
-  Future<void> enqueueUrl(String url);
+  Future<String> enqueueUrl(String url);
+  Future<void> cancel(String id);
   Stream<List<DownloadItem>> watchDownloads();
 }
 
@@ -22,8 +24,21 @@ class MockDownloadService implements DownloadService {
   }
 
   @override
-  Future<void> enqueueUrl(String url) async {
-    _items.add(DownloadItem(url: url, status: 'queued (placeholder)'));
+  Future<String> enqueueUrl(String url) async {
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
+    _items.add(DownloadItem(id: id, url: url, status: 'queued (placeholder)'));
+    _controller.add(List.unmodifiable(_items));
+    return id;
+  }
+
+  @override
+  Future<void> cancel(String id) async {
+    final index = _items.indexWhere((item) => item.id == id);
+    if (index == -1) {
+      return;
+    }
+    final item = _items[index];
+    _items[index] = DownloadItem(id: item.id, url: item.url, status: 'cancelled');
     _controller.add(List.unmodifiable(_items));
   }
 

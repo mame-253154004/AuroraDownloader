@@ -60,10 +60,14 @@ flutter test
 - UI katmanı doğrudan native detaylara bağlı değildir.
 - Flutter tarafında servis/bridge sözleşmesi:
   - `apps/flutter_app/lib/core/services/download_service.dart`
+  - `apps/flutter_app/lib/core/services/bridge_download_service.dart`
   - `apps/flutter_app/lib/core/services/rust_bridge_contract.dart`
 - Rust tarafında domain modeller ve güvenlik katmanı:
   - `rust/core/src/models.rs`
   - `rust/core/src/security/url_policy.rs`
+- Rust servis/manager katmanı:
+  - `rust/core/src/download/manager.rs`
+  - `rust/core/src/api/service.rs`
 - Downloader prototipi:
   - `rust/core/src/download/engine.rs`
   - `.part` geçici dosya + güvenli dosya adı sanitization + cancellation token + retry/timeout + max size
@@ -80,6 +84,7 @@ flutter test
 - Dosya adı sanitization/path traversal testleri
 - Model JSON serialization testleri
 - Downloader integration testi (yerel TCP test sunucusu)
+- DownloadManager lifecycle testleri (enqueue/start/cancel/terminal state)
 
 ## Lisans
 Bu repo `LICENSE` dosyasındaki lisans ile dağıtılır.

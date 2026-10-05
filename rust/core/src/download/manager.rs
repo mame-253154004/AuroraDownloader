@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -18,6 +18,7 @@ pub struct DownloadManager {
     config: DownloaderConfig,
     sink: Option<Arc<dyn DownloadEventSink>>,
     active: Arc<Mutex<HashMap<DownloadId, CancellationToken>>>,
+    cancellation_requested: Arc<Mutex<HashSet<DownloadId>>>,
 }
 
 impl DownloadManager {
@@ -32,6 +33,7 @@ impl DownloadManager {
             config,
             sink: None,
             active: Arc::new(Mutex::new(HashMap::new())),
+            cancellation_requested: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -42,6 +44,11 @@ impl DownloadManager {
 
     pub fn enqueue(&self, request: DownloadRequest) -> Result<(), DownloadError> {
         self.policy.validate(&request.url)?;
+        if self.repository.get(&request.id).is_some() {
+            return Err(DownloadError::Internal {
+                reason: "download id already exists".to_string(),
+            });
+        }
 
         let destination_path = safe_target_path(
             Path::new(&request.destination_dir),
@@ -77,8 +84,9 @@ impl DownloadManager {
                     reason: "download must be enqueued before start".to_string(),
                 })?;
 
+        let started_at = Utc::now();
         record.status = DownloadStatus::Running;
-        record.started_at = Some(Utc::now());
+        record.started_at = Some(started_at);
 
         self.repository
             .update(record)
@@ -100,6 +108,8 @@ impl DownloadManager {
         let config = self.config.clone();
         let sink = self.sink.clone();
         let request_for_task = request.clone();
+        let started_at_for_task = started_at;
+        let cancellation_requested = Arc::clone(&self.cancellation_requested);
 
         tokio::spawn(async move {
             let sink_ref = sink.as_deref();
@@ -113,6 +123,11 @@ impl DownloadManager {
             )
             .await;
 
+            let cancelled_by_request = cancellation_requested
+                .lock()
+                .map(|mut set| set.remove(&request_for_task.id))
+                .unwrap_or(false);
+
             let final_record = match result {
                 Ok(record) => record,
                 Err(err) => DownloadRecord {
@@ -124,16 +139,20 @@ impl DownloadManager {
                     )
                     .map(|p| p.display().to_string())
                     .unwrap_or_else(|_| request_for_task.requested_file_name.clone()),
-                    status: if matches!(err, DownloadError::Cancelled) {
+                    status: if cancelled_by_request || matches!(err, DownloadError::Cancelled) {
                         DownloadStatus::Cancelled
                     } else {
                         DownloadStatus::Failed
                     },
                     downloaded_bytes: 0,
                     total_bytes: None,
-                    error: Some(err),
+                    error: Some(if cancelled_by_request {
+                        DownloadError::Cancelled
+                    } else {
+                        err
+                    }),
                     created_at: request_for_task.created_at,
-                    started_at: Some(Utc::now()),
+                    started_at: Some(started_at_for_task),
                     completed_at: Some(Utc::now()),
                 },
             };
@@ -158,6 +177,9 @@ impl DownloadManager {
             .cloned();
 
         if let Some(token) = token {
+            if let Ok(mut set) = self.cancellation_requested.lock() {
+                set.insert(id.clone());
+            }
             token.cancel();
             return Ok(true);
         }
@@ -184,6 +206,10 @@ impl DownloadManager {
 
     pub fn list(&self) -> Vec<DownloadRecord> {
         self.repository.list()
+    }
+
+    pub fn get(&self, id: &DownloadId) -> Option<DownloadRecord> {
+        self.repository.get(id)
     }
 }
 
@@ -248,11 +274,23 @@ mod tests {
         let cancelled = manager.cancel(&id).expect("cancel");
 
         assert!(cancelled);
-        let record = manager
-            .list()
-            .into_iter()
-            .find(|item| item.id == id)
-            .expect("record exists");
+        let record = manager.get(&id).expect("record exists");
         assert_eq!(record.status, DownloadStatus::Cancelled);
+    }
+
+    #[test]
+    fn enqueue_rejects_duplicate_id() {
+        let repo = Arc::new(InMemoryDownloadRepository::default());
+        let manager = DownloadManager::new(
+            repo,
+            UrlPolicy::new(UrlPolicyConfig::default()),
+            DownloaderConfig::default(),
+        );
+
+        let request = sample_request();
+        let duplicate = request.clone();
+        manager.enqueue(request).expect("first enqueue");
+        let err = manager.enqueue(duplicate).expect_err("must fail");
+        assert!(matches!(err, DownloadError::Internal { .. }));
     }
 }
