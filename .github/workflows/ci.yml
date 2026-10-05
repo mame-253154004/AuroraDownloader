@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Rust fmt
+        run: cargo fmt --all -- --check
+      - name: Rust check
+        run: cargo check --workspace
+      - name: Rust test
+        run: cargo test --workspace
+
+  flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Flutter
+        id: setup_flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+        continue-on-error: true
+      - name: Check Flutter availability
+        id: flutter_check
+        run: |
+          if command -v flutter >/dev/null 2>&1; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "Flutter SDK not available; flutter analyze/test steps are skipped."
+          fi
+      - name: Flutter pub get
+        if: steps.flutter_check.outputs.available == 'true'
+        working-directory: apps/flutter_app
+        run: flutter pub get
+      - name: Flutter format check
+        if: steps.flutter_check.outputs.available == 'true'
+        working-directory: apps/flutter_app
+        run: dart format --set-exit-if-changed lib
+      - name: Flutter analyze
+        if: steps.flutter_check.outputs.available == 'true'
+        working-directory: apps/flutter_app
+        run: flutter analyze
+      - name: Flutter test
+        if: steps.flutter_check.outputs.available == 'true'
+        working-directory: apps/flutter_app
+        run: flutter test
